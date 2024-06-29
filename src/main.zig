@@ -1,11 +1,21 @@
 const std = @import("std");
 const w4 = @import("wasm4.zig");
+const inputs = @import("inputs.zig");
 
-const SNAKE_SPEED = 0.5;
+const TICK_TIME = 1.0 / 4.0;
+const DELTA = 1.0 / 60.0 / TICK_TIME;
+const UNIT_SIZE = 8;
+const SCREEN_SIZE = w4.SCREEN_SIZE / UNIT_SIZE;
+
+const Model = struct {
+    snake: Snake,
+    inputBuf: inputs.InputBuf(2),
+};
 
 const Vec2 = struct {
     x: f32,
     y: f32,
+
     fn init(x: f32, y: f32) Vec2 {
         return Vec2{ .x = x, .y = y };
     }
@@ -24,6 +34,12 @@ const Vec2 = struct {
     fn scale(v: Vec2, n: f32) Vec2 {
         return Vec2.init(v.x * n, v.y * n);
     }
+    fn toPixes(v: Vec2) struct { x: i16, y: i16 } {
+        return .{
+            .x = @intFromFloat(v.x * UNIT_SIZE),
+            .y = @intFromFloat(v.y * UNIT_SIZE),
+        };
+    }
 };
 
 const Snake = struct {
@@ -32,54 +48,68 @@ const Snake = struct {
     fn init(x: i32, y: i32) Snake {
         return Snake{ .head = Vec2.init(x, y), .dir = Vec2.init(1, 0) };
     }
-    fn update(s: *Snake) void {
-        if (wasKeyPressed(w4.BUTTON_UP) and s.dir.y == 0) {
-            s.nextDir = Vec2.init(0, -1);
-        } else if (wasKeyPressed(w4.BUTTON_DOWN) and s.dir.y == 0) {
-            s.nextDir = Vec2.init(0, 1);
-        } else if (wasKeyPressed(w4.BUTTON_LEFT) and s.dir.x == 0) {
-            s.nextDir = Vec2.init(-1, 0);
-        } else if (wasKeyPressed(w4.BUTTON_RIGHT) and s.dir.x == 0) {
-            s.nextDir = Vec2.init(1, 0);
+    fn update(s: *Snake, m: *Model) void {
+        const coord = s.head.toPixes();
+        if (@mod(coord.x, UNIT_SIZE) == 0 and @mod(coord.y, UNIT_SIZE) == 0) {
+            const inp = m.inputBuf.get();
+            if (inp.isKeyDown(w4.BUTTON_UP) and s.dir.y == 0) {
+                s.dir = Vec2.init(0, -1);
+            } else if (inp.isKeyDown(w4.BUTTON_DOWN) and s.dir.y == 0) {
+                s.dir = Vec2.init(0, 1);
+            } else if (inp.isKeyDown(w4.BUTTON_LEFT) and s.dir.x == 0) {
+                s.dir = Vec2.init(-1, 0);
+            } else if (inp.isKeyDown(w4.BUTTON_RIGHT) and s.dir.x == 0) {
+                s.dir = Vec2.init(1, 0);
+            }
         }
 
-        s.head = s.head.add(s.dir.scale(SNAKE_SPEED));
+        s.head = s.head.add(s.dir.scale(DELTA));
 
         log(0, 0, "head {d:.0} {d:.0}", .{ s.head.x, s.head.y });
         log(0, 8, "dir {d:.0} {d:.0}", .{ s.dir.x, s.dir.y });
-        if (s.head.x >= w4.SCREEN_SIZE) {
-            s.head.x -= w4.SCREEN_SIZE;
+        if (s.head.x >= SCREEN_SIZE) {
+            s.head.x -= SCREEN_SIZE;
         }
-        if (s.head.x <= -16) {
-            s.head.x += w4.SCREEN_SIZE + 16;
+        if (s.head.x <= -1) {
+            s.head.x += SCREEN_SIZE + 1;
         }
-        if (s.head.y >= w4.SCREEN_SIZE) {
-            s.head.y -= w4.SCREEN_SIZE;
+        if (s.head.y >= SCREEN_SIZE) {
+            s.head.y -= SCREEN_SIZE;
         }
-        if (s.head.y <= -16) {
-            s.head.y += w4.SCREEN_SIZE + 16;
+        if (s.head.y <= -1) {
+            s.head.y += SCREEN_SIZE + 1;
         }
     }
     fn render(s: Snake) void {
-        setColors(2, 3, 0, 0);
-        w4.rect(@intFromFloat(s.head.x), @intFromFloat(s.head.y), 8, 8);
+        setColors(3, 4, 0, 0);
+        const x: i16 = @intFromFloat(s.head.x * UNIT_SIZE);
+        const y: i16 = @intFromFloat(s.head.y * UNIT_SIZE);
+        w4.rect(x, y, UNIT_SIZE, UNIT_SIZE);
     }
 };
 
-var snake = Snake.init(16, 80);
-
-var previous_gamepad: u8 = 0;
+var model = Model{
+    .snake = Snake.init(1, SCREEN_SIZE / 2),
+    .inputBuf = inputs.InputBuf(2){},
+};
 
 export fn start() void {}
 
 export fn update() void {
-    snake.update();
-    snake.render();
-    previous_gamepad = w4.GAMEPAD1.*;
-}
+    for (0..SCREEN_SIZE) |x| {
+        for (0..SCREEN_SIZE) |y| {
+            if ((x % 2) == (y % 2)) {
+                setColors(1, 0, 0, 0);
+            } else {
+                setColors(2, 0, 0, 0);
+            }
+            w4.rect(@intCast(x * UNIT_SIZE), @intCast(y * UNIT_SIZE), UNIT_SIZE, UNIT_SIZE);
+        }
+    }
 
-fn wasKeyPressed(mask: u8) bool {
-    return (w4.GAMEPAD1.* & mask) != 0 and (previous_gamepad & mask) != 0;
+    model.inputBuf.update();
+    model.snake.update(&model);
+    model.snake.render();
 }
 
 fn setColors(c1: u4, c2: u4, c3: u4, c4: u4) void {
@@ -88,6 +118,7 @@ fn setColors(c1: u4, c2: u4, c3: u4, c4: u4) void {
 }
 
 fn log(x: i32, y: i32, comptime template: []const u8, args: anytype) void {
+    setColors(3, 2, 0, 0);
     var s: [256]u8 = undefined;
     _ = std.fmt.bufPrintZ(&s, template, args) catch |err| {
         switch (err) {
