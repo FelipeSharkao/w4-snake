@@ -1,6 +1,68 @@
+const std = @import("std");
 const w4 = @import("wasm4.zig");
+
+const SNAKE_SPEED = 0.5;
+
+const Vec2 = struct {
+    x: f32,
+    y: f32,
+    fn init(x: f32, y: f32) Vec2 {
+        return Vec2{ .x = x, .y = y };
+    }
+    fn add(a: Vec2, b: Vec2) Vec2 {
+        return Vec2.init(a.x + b.x, a.y + b.y);
+    }
+    fn sub(a: Vec2, b: Vec2) Vec2 {
+        return Vec2.init(a.x - b.x, a.y - b.y);
+    }
+    fn distanceSqr(a: Vec2, b: Vec2) f32 {
+        return b.sub(a).sizeSqr();
+    }
+    fn sizeSqr(v: Vec2) f32 {
+        return v.x * v.x + v.y * v.y;
+    }
+    fn scale(v: Vec2, n: f32) Vec2 {
+        return Vec2.init(v.x * n, v.y * n);
+    }
+};
+
+const Snake = struct {
+    head: Vec2,
+    fn init(x: i32, y: i32) Snake {
+        return Snake{ .head = Vec2.init(x, y), .dir = Vec2.init(1, 0) };
+    }
+    fn update(s: *Snake) void {
+        s.head = s.head.add(s.dir.scale(SNAKE_SPEED));
+        log(0, 0, "head {d:.0} {d:.0}", .{ s.head.x, s.head.y });
+    }
+    fn render(s: Snake) void {
+        setColors(2, 3, 0, 0);
+        w4.rect(@intFromFloat(s.head.x), @intFromFloat(s.head.y), 8, 8);
+    }
+};
+
+var snake = Snake.init(16, 80);
 
 export fn start() void {}
 
 export fn update() void {
+    snake.update();
+    snake.render();
+    previous_gamepad = w4.GAMEPAD1.*;
+}
+
+fn setColors(c1: u4, c2: u4, c3: u4, c4: u4) void {
+    w4.DRAW_COLORS.* =
+        @as(u16, @intCast(c1)) | (@as(u16, @intCast(c2)) << 4) | (@as(u16, @intCast(c3)) << 8) | (@as(u16, @intCast(c4)) << 12);
+}
+
+fn log(x: i32, y: i32, comptime template: []const u8, args: anytype) void {
+    var s: [256]u8 = undefined;
+    _ = std.fmt.bufPrintZ(&s, template, args) catch |err| {
+        switch (err) {
+            error.NoSpaceLeft => w4.trace("[ERR] log buffer not large enough"),
+        }
+        return;
+    };
+    w4.text(&s, x, y);
 }
