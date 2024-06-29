@@ -47,6 +47,18 @@ const Snake = struct {
 
         log(0, 0, "head {d:.0} {d:.0}", .{ s.head.x, s.head.y });
         log(0, 8, "dir {d:.0} {d:.0}", .{ s.dir.x, s.dir.y });
+        if (s.head.x >= w4.SCREEN_SIZE) {
+            s.head.x -= w4.SCREEN_SIZE;
+        }
+        if (s.head.x <= -16) {
+            s.head.x += w4.SCREEN_SIZE + 16;
+        }
+        if (s.head.y >= w4.SCREEN_SIZE) {
+            s.head.y -= w4.SCREEN_SIZE;
+        }
+        if (s.head.y <= -16) {
+            s.head.y += w4.SCREEN_SIZE + 16;
+        }
     }
     fn render(s: Snake) void {
         setColors(2, 3, 0, 0);
