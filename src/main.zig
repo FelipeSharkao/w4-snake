@@ -1,5 +1,3 @@
-const std = @import("std");
-
 const inputs = @import("inputs.zig");
 const snake = @import("snake.zig");
 const utils = @import("utils.zig");

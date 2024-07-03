@@ -1,4 +1,6 @@
 const std = @import("std");
+const builtin = @import("builtin");
+const buildOpts = @import("build_options");
 
 const w4 = @import("wasm4.zig");
 
@@ -16,15 +18,17 @@ pub fn setColors(c1: u4, c2: u4, c3: u4, c4: u4) void {
 }
 
 pub fn log(x: i32, y: i32, comptime template: []const u8, args: anytype) void {
-    setColors(3, 2, 0, 0);
-    var s: [256]u8 = undefined;
-    _ = std.fmt.bufPrintZ(&s, template, args) catch |err| {
-        switch (err) {
-            error.NoSpaceLeft => w4.trace("[ERR] log buffer not large enough"),
-        }
-        return;
-    };
-    w4.text(&s, x, y);
+    if (comptime builtin.mode == .Debug) {
+        setColors(3, 2, 0, 0);
+        var s: [256]u8 = undefined;
+        _ = std.fmt.bufPrintZ(&s, template, args) catch |err| {
+            switch (err) {
+                error.NoSpaceLeft => w4.trace("[ERR] log buffer not large enough"),
+            }
+            return;
+        };
+        w4.text(&s, x, y);
+    }
 }
 
 pub fn Event(comptime TMsg: type) type {

@@ -1,5 +1,3 @@
-const std = @import("std");
-
 const utils = @import("utils.zig");
 
 pub const Vec2 = struct {
@@ -28,7 +26,7 @@ pub const Vec2 = struct {
         return Vec2.init(v.x * n, v.y * n);
     }
     pub fn normalized(v: Vec2) Vec2 {
-        const invSize = 1 / std.math.sqrt(v.sizeSqr());
+        const invSize = 1 / @sqrt(v.sizeSqr());
         return Vec2.init(v.x, v.y).scale(invSize);
     }
     pub fn toPixels(v: Vec2) struct { x: i16, y: i16 } {

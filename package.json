@@ -1,9 +1,10 @@
 {
-    "scripts": {
-        "build": "NODE_ENV=production bun build.ts",
-        "dev": "NODE_ENV=development bun build.ts"
-    },
-    "devDependencies": {
-        "@types/bun": "^1.1.6"
-    }
+  "scripts": {
+    "build": "NODE_ENV=production bun build.ts",
+    "dev": "NODE_ENV=development bun build.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.1.6",
+    "wasm4": "^2.7.0"
+  }
 }

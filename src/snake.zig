@@ -1,5 +1,3 @@
-const std = @import("std");
-
 const inputs = @import("inputs.zig");
 const vec = @import("vec.zig");
 const Vec2 = vec.Vec2;

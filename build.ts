@@ -3,18 +3,38 @@ import fs from "node:fs/promises";
 
 const isProd = process.env.NODE_ENV?.toLowerCase() == "production";
 
+const GAME_TITLE = "Snake";
+const CART_PATH = `${import.meta.dir}/zig-out/bin/cart.wasm`;
+const HTML_PATH = `${import.meta.dir}/dist/index.html`;
+
 if (isProd) {
     await build();
+    await bundle();
 } else {
-    watch();
+    runDevServer();
 }
 
 async function build() {
-    const optimize = isProd ? "ReleaseFast" : "Debug";
+    const optimize = isProd ? "ReleaseSmall" : "Debug";
     await cmd("BUILD", "zig", "build", `-Doptimize=${optimize}`);
 }
 
-async function watch() {
+async function bundle() {
+    await cmd(
+        "BUNDLE",
+        "bunx",
+        "w4",
+        "bundle",
+        CART_PATH,
+        "--title",
+        GAME_TITLE,
+        "--html",
+        HTML_PATH,
+    );
+}
+
+async function runDevServer() {
+            console.clear()
     await build();
     run();
 
@@ -27,18 +47,18 @@ async function watch() {
 
     for await (const event of watcher) {
         if (event.filename && glob.match(event.filename)) {
+            console.clear()
             build();
         }
     }
 }
 
 async function run() {
-    await cmd("RUN", "w4", "run", "--hot", `${import.meta.dir}/zig-out/bin/cart.wasm`);
+    await cmd("RUN", "bunx", "w4", "run", "--hot", CART_PATH);
 }
 
 async function cmd(prefix: string, exec: string, ...args: string[]) {
     const cmd = [exec, ...args];
-    console.log();
     console.log(`Running ${cmd.join(" ")}`);
     const proc = Bun.spawn(cmd, { stderr: "pipe" });
 
