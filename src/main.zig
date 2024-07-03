@@ -2,14 +2,24 @@ const std = @import("std");
 const w4 = @import("wasm4.zig");
 const inputs = @import("inputs.zig");
 
-const TICK_TIME = 1.0 / 4.0;
+const TICK_TIME = 1.0 / 1.0;
 const DELTA = 1.0 / 60.0 / TICK_TIME;
 const UNIT_SIZE = 8;
 const SCREEN_SIZE = w4.SCREEN_SIZE / UNIT_SIZE;
 
 const Model = struct {
     snake: Snake,
-    inputBuf: inputs.InputBuf(2),
+    inputBuf: inputs.InputBuf(3),
+
+    fn init() Model {
+        return Model{
+            .snake = Snake.init(3, SCREEN_SIZE / 2),
+            .inputBuf = inputs.InputBuf(3){},
+        };
+    }
+    fn gameOver(m: *Model) void {
+        m.* = Model.init();
+    }
 };
 
 const Vec2 = struct {
@@ -28,29 +38,63 @@ const Vec2 = struct {
     fn distanceSqr(a: Vec2, b: Vec2) f32 {
         return b.sub(a).sizeSqr();
     }
+    fn dirTo(a: Vec2, b: Vec2) Vec2 {
+        return b.sub(a).normalized();
+    }
     fn sizeSqr(v: Vec2) f32 {
         return v.x * v.x + v.y * v.y;
     }
     fn scale(v: Vec2, n: f32) Vec2 {
         return Vec2.init(v.x * n, v.y * n);
     }
-    fn toPixes(v: Vec2) struct { x: i16, y: i16 } {
+    fn normalized(v: Vec2) Vec2 {
+        const invSize = 1 / std.math.sqrt(v.sizeSqr());
+        return Vec2.init(v.x, v.y).scale(invSize);
+    }
+    fn toPixels(v: Vec2) struct { x: i16, y: i16 } {
         return .{
             .x = @intFromFloat(v.x * UNIT_SIZE),
             .y = @intFromFloat(v.y * UNIT_SIZE),
         };
     }
+    fn isOnGrid(v: Vec2) bool {
+        const coord = v.toPixels();
+        return @mod(coord.x, UNIT_SIZE) == 0 and @mod(coord.y, UNIT_SIZE) == 0;
+    }
 };
 
 const Snake = struct {
-    head: Vec2,
+    pos: Vec2,
     dir: Vec2,
-    fn init(x: i32, y: i32) Snake {
-        return Snake{ .head = Vec2.init(x, y), .dir = Vec2.init(1, 0) };
+    segments: [10]SnakeSegment = undefined,
+    len: usize,
+    fn init(x: f32, y: f32) Snake {
+        const pos = Vec2.init(x, y);
+        const dir = Vec2.init(1, 0);
+
+        var s = Snake{
+            .pos = pos,
+            .dir = dir,
+            .len = 3,
+        };
+
+        s.segments[0] = .{
+            .pos = pos,
+            .dir = dir,
+            .isHead = true,
+        };
+
+        for (1..s.len) |i| {
+            s.segments[i] = .{
+                .pos = pos.sub(dir.scale(@floatFromInt(i))),
+                .dir = dir,
+            };
+        }
+
+        return s;
     }
     fn update(s: *Snake, m: *Model) void {
-        const coord = s.head.toPixes();
-        if (@mod(coord.x, UNIT_SIZE) == 0 and @mod(coord.y, UNIT_SIZE) == 0) {
+        if (s.pos.isOnGrid()) {
             const inp = m.inputBuf.get();
             if (inp.isKeyDown(w4.BUTTON_UP) and s.dir.y == 0) {
                 s.dir = Vec2.init(0, -1);
@@ -63,35 +107,61 @@ const Snake = struct {
             }
         }
 
-        s.head = s.head.add(s.dir.scale(DELTA));
+        s.pos = s.pos.add(s.dir.scale(DELTA));
 
-        log(0, 0, "head {d:.0} {d:.0}", .{ s.head.x, s.head.y });
+        log(0, 0, "pos {d:.1} {d:.1}", .{ s.pos.x, s.pos.y });
         log(0, 8, "dir {d:.0} {d:.0}", .{ s.dir.x, s.dir.y });
-        if (s.head.x >= SCREEN_SIZE) {
-            s.head.x -= SCREEN_SIZE;
+        log(0, 16, "len {}", .{s.len});
+
+        s.segments[0].update(s.dir);
+
+        var prevSegPos = s.pos;
+        for (1..s.len) |i| {
+            var seg = &s.segments[i];
+            seg.update(seg.pos.dirTo(prevSegPos));
+            prevSegPos = seg.pos;
         }
-        if (s.head.x <= -1) {
-            s.head.x += SCREEN_SIZE + 1;
-        }
-        if (s.head.y >= SCREEN_SIZE) {
-            s.head.y -= SCREEN_SIZE;
-        }
-        if (s.head.y <= -1) {
-            s.head.y += SCREEN_SIZE + 1;
+
+        if (s.pos.x > SCREEN_SIZE - 1 or s.pos.x < 0 or
+            s.pos.y > SCREEN_SIZE - 1 or s.pos.x < 0)
+        {
+            m.gameOver();
+            return;
         }
     }
     fn render(s: Snake) void {
-        setColors(3, 4, 0, 0);
-        const x: i16 = @intFromFloat(s.head.x * UNIT_SIZE);
-        const y: i16 = @intFromFloat(s.head.y * UNIT_SIZE);
-        w4.rect(x, y, UNIT_SIZE, UNIT_SIZE);
+        var i = s.len;
+        while (i > 0) {
+            i -= 1;
+            s.segments[i].render();
+        }
     }
 };
 
-var model = Model{
-    .snake = Snake.init(1, SCREEN_SIZE / 2),
-    .inputBuf = inputs.InputBuf(2){},
+const SnakeSegment = struct {
+    pos: Vec2,
+    dir: Vec2,
+    isHead: bool = false,
+
+    fn render(s: SnakeSegment) void {
+        setColors(3, 4, 0, 0);
+        const coord = s.pos.toPixels();
+        if (s.isHead) {
+            w4.rect(coord.x, coord.y, UNIT_SIZE, UNIT_SIZE);
+        } else {
+            w4.rect(coord.x + 1, coord.y + 1, UNIT_SIZE - 2, UNIT_SIZE - 2);
+        }
+    }
+    fn update(s: *SnakeSegment, nextDir: Vec2) void {
+        s.pos = s.pos.add(s.dir.scale(DELTA));
+
+        if (nextDir.isOnGrid()) {
+            s.dir = nextDir;
+        }
+    }
 };
+
+var model = Model.init();
 
 export fn start() void {}
 
@@ -103,7 +173,12 @@ export fn update() void {
             } else {
                 setColors(2, 0, 0, 0);
             }
-            w4.rect(@intCast(x * UNIT_SIZE), @intCast(y * UNIT_SIZE), UNIT_SIZE, UNIT_SIZE);
+            w4.rect(
+                @intCast(x * UNIT_SIZE),
+                @intCast(y * UNIT_SIZE),
+                UNIT_SIZE,
+                UNIT_SIZE,
+            );
         }
     }
 
@@ -114,7 +189,10 @@ export fn update() void {
 
 fn setColors(c1: u4, c2: u4, c3: u4, c4: u4) void {
     w4.DRAW_COLORS.* =
-        @as(u16, @intCast(c1)) | (@as(u16, @intCast(c2)) << 4) | (@as(u16, @intCast(c3)) << 8) | (@as(u16, @intCast(c4)) << 12);
+        @as(u16, @intCast(c1)) |
+        (@as(u16, @intCast(c2)) << 4) |
+        (@as(u16, @intCast(c3)) << 8) |
+        (@as(u16, @intCast(c4)) << 12);
 }
 
 fn log(x: i32, y: i32, comptime template: []const u8, args: anytype) void {
